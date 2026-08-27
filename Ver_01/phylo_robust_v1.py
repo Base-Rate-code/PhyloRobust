@@ -147,6 +147,44 @@ def p_distance(sequence_1, sequence_2):
 
     return differences / comparable_sites
 
+def calculate_distance_matrix(sequences, distance_function):
+    """
+    Calculate a pairwise distance matrix.
+
+    Parameters
+    ----------
+    sequences : dict
+        Dictionary mapping sequence names to sequences.
+
+    distance_function : function
+        Function used to calculate the distance between two sequences.
+
+    Returns
+    -------
+    dict
+        Nested dictionary containing pairwise distances.
+    """
+
+    names = list(sequences.keys())
+    matrix={}
+
+    for name_1 in names:
+        matrix[name_1]= {}
+
+        for name_2 in names:
+
+            if name_1 == name_2:
+                matrix[name_1][name_2] = 0.0
+
+            else:
+                matrix[name_1][name_2] = distance_function(
+                    sequences[name_1],
+                    sequences[name_2]
+                )
+
+    return matrix
+
+
 
 
 # ============================================================
@@ -178,12 +216,12 @@ def main():
     sequences = read_fasta("Ver_01/test.fasta")
     validate_alignment(sequences)
 
-    distance = p_distance(
-        sequences["Sequence_A"],
-        sequences["Sequence_B"]
+    matrix = calculate_distance_matrix(
+        sequences,
+        p_distance
     )
 
-    print("p-distance:", distance)
+    print(matrix)
 
 
 if __name__ == "__main__":
