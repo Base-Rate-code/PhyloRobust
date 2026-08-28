@@ -184,12 +184,68 @@ def calculate_distance_matrix(sequences, distance_function):
 
     return matrix
 
+import math
+
+def jukes_cantor_distance(sequence_1, sequence_2):
+     """
+    Calculate the Jukes-Cantor evolutionary distance
+    between two aligned nucleotide sequences.
+
+    Gap-containing positions are excluded.
+
+    Parameters
+    ----------
+    sequence_1 : str
+        First aligned sequence.
+
+    sequence_2 : str
+        Second aligned sequence.
+
+    Returns
+    -------
+    float
+        Jukes-Cantor distance.
+    """
+
+     p = p_distance(sequence_1, sequence_2)
+
+     if p >= 0.75:
+        raise ValueError(
+             "Jukes Cantor distanc is undefined when"
+             "p-distance is >= 0.75."
+         )
+
+     return -0.75 *math.log(1-(4/3)*p)
+
+     
+
 
 
 
 # ============================================================
 # Tree construction
 # ============================================================
+
+class Node:
+    """
+    Represent a node in a phylogenetic tree.
+    """
+
+    def __init__(self, name=None, branch_length=0.0):
+        self.name =name
+        self.branch_length = branch_length
+        self.children =[]
+        self.parent = None
+
+    def add_child(self, child):
+        """
+        Add a child node and assign this node as its parent.
+        """
+
+        self.children.append(child)
+        child.parent = self
+
+
 
 
 # ============================================================
@@ -213,15 +269,29 @@ def calculate_distance_matrix(sequences, distance_function):
 
 def main():
     """Run PhyloRobust V1."""
+
     sequences = read_fasta("Ver_01/test.fasta")
+
     validate_alignment(sequences)
 
-    matrix = calculate_distance_matrix(
-        sequences,
-        p_distance
-    )
 
-    print(matrix)
+    node_a = Node("Sequence_A")
+    node_b = Node("Sequence_B")
+
+    parent = Node("Internal")
+
+    parent.add_child(node_a)
+    parent.add_child(node_b)
+
+    print("Parent:", parent.name)
+    print("Children:")
+
+    for child in parent.children:
+        print(child.name)
+        
+    print("A's parent:", node_a.parent.name)
+    print("B's parent:", node_b.parent.name)
+
 
 
 if __name__ == "__main__":
