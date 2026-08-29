@@ -10,6 +10,7 @@ Version: 1.0
 # Imports
 # ============================================================
 
+import math
 
 # ============================================================
 # FASTA handling
@@ -42,6 +43,11 @@ def read_fasta(filename):
 
             if line.startswith(">"):
                 current_name = line[1:].strip()
+
+                if not current_name:
+                    raise ValueError(
+                        "FASTA header cannot be empty."
+                        )
 
                 if not current_name:
                     raise ValueError(
@@ -184,7 +190,6 @@ def calculate_distance_matrix(sequences, distance_function):
 
     return matrix
 
-import math
 
 def jukes_cantor_distance(sequence_1, sequence_2):
      """
@@ -245,6 +250,77 @@ class Node:
         self.children.append(child)
         child.parent = self
 
+def find_closest_clusters(distance_matrix, clusters):
+    """
+    Find the pair of clusters with the smallest distance.
+
+    Parameters
+    ----------
+    distance_matrix : dict
+        Current distance matrix.
+
+    clusters : dict
+        Current active clusters.
+
+        Returns
+    -------
+    tuple
+        Names of the two closest clusters.
+    """
+
+    cluster_names = list(clusters.keys())
+
+    best_pair = None
+    best_distance = float("inf")
+
+    for i in range(len(cluster_names)):
+        for j in range(i+1, len(cluster_names)):
+
+            cluster_1 = cluster_names[i]
+            cluster_2 = cluster_names[j]
+
+            distance = distance_matrix[cluster_1][cluster_2]
+
+            if distance < best_distance:
+                best_distance= distance
+                best_pair = (cluster_1, cluster_2)
+
+    return best_pair
+
+def merge_clusters(clusters, cluster_1, cluster_2):
+    """
+    Merge two clusters into a new internal node.
+
+    Parameters
+    ----------
+    clusters : dict
+        Current active clusters.
+
+    cluster_1 : str
+        Name of the first cluster.
+
+    cluster_2 : str
+        Name of the second cluster.
+
+    Returns
+    -------
+    tuple
+        New cluster name and new Node object.
+    """
+
+    node_1 = clusters[cluster_1]
+    node_2 = clusters[cluster_2]
+
+    new_name = f"({cluster_1}, {cluster_2})"
+
+    new_node = Node(new_name)
+
+    new_node.add_child(node_1)
+    new_node.add_child(node_2)
+
+    return new_name, new_node
+
+
 
 
 
@@ -274,23 +350,33 @@ def main():
 
     validate_alignment(sequences)
 
+    matrix = calculate_distance_matrix(
+        sequences,
+        p_distance
+    )
 
-    node_a = Node("Sequence_A")
-    node_b = Node("Sequence_B")
+    clusters= {
+        name: Node(name)
+        for name in sequences
+    }
 
-    parent = Node("Internal")
+    pair = find_closest_clusters(matrix, clusters)
 
-    parent.add_child(node_a)
-    parent.add_child(node_b)
+    print("Closest clusters:", pair)
 
-    print("Parent:", parent.name)
+    new_name, new_node = merge_clusters(
+        clusters, 
+        pair[0],
+        pair[1]
+    )
+
+    print ("New Cluster:", new_name)
     print("Children:")
 
-    for child in parent.children:
+    for child in new_node.children:
         print(child.name)
-        
-    print("A's parent:", node_a.parent.name)
-    print("B's parent:", node_b.parent.name)
+
+
 
 
 
