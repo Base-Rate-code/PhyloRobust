@@ -236,9 +236,10 @@ class Node:
     Represent a node in a phylogenetic tree.
     """
 
-    def __init__(self, name=None, branch_length=0.0):
+    def __init__(self, name=None, branch_length=0.0, height = 0.0):
         self.name =name
         self.branch_length = branch_length
+        self.height =  height
         self.children =[]
         self.parent = None
 
@@ -287,7 +288,7 @@ def find_closest_clusters(distance_matrix, clusters):
 
     return best_pair
 
-def merge_clusters(clusters, cluster_1, cluster_2):
+def merge_clusters(clusters, cluster_1, cluster_2, distance):
     """
     Merge two clusters into a new internal node.
 
@@ -312,13 +313,142 @@ def merge_clusters(clusters, cluster_1, cluster_2):
     node_2 = clusters[cluster_2]
 
     new_name = f"({cluster_1}, {cluster_2})"
+    new_height= distance/ 2
 
-    new_node = Node(new_name)
+    # Calculate branch lengths from the new node
+    # to each child.
+    node_1.branch_length = new_height - node_1.height
+    node_2.branch_length = new_height - node_2.height
+
+    new_node = Node(
+        new_name,
+        height=  new_height
+        )
 
     new_node.add_child(node_1)
     new_node.add_child(node_2)
 
     return new_name, new_node
+
+def update_distance_matrix(distance_matrix, cluster_1, cluster_2, new_cluster):
+    """
+    Update the distance matrix after merging two clusters.
+
+    UPGMA calculates the distance between the new cluster and
+    each remaining cluster using the arithmetic mean.
+
+    Parameters
+    ----------
+    distance_matrix : dict
+        Current distance matrix.
+
+    cluster_1 : str
+        First cluster being merged.
+
+    cluster_2 : str
+        Second cluster being merged.
+
+    new_cluster : str
+        Name of the newly created cluster.
+
+    Returns
+    -------
+    dict
+        Updated distance matrix.
+    """
+
+    remaining_clusters= [
+        name for name in distance_matrix
+        if name not in (cluster_1, cluster_2)
+    ]
+    new_matrix = {}
+
+    # Create entries for the remaining clusters
+    for name in remaining_clusters:
+        new_matrix[name] = {}
+
+    # Create entry for the new cluster
+    new_matrix[new_cluster] = {}
+
+    # Calculate distances between the new cluster
+    # and every remaining cluster.
+    for name in remaining_clusters:
+
+        distance_1 = distance_matrix[cluster_1][name]
+        distance_2 = distance_matrix[cluster_2][name]
+
+        new_distance = (distance_1 + distance_2)/2
+
+        new_matrix[name][new_cluster] = new_distance
+        new_matrix[new_cluster][name] = new_distance
+
+    # Distance of a cluster to itself is zero.
+    new_matrix[new_cluster][new_cluster] = 0.0
+
+    # Preserve zero self-distances for remaining clusters.
+    for name in remaining_clusters:
+        new_matrix[name][name] = 0.0
+
+    return new_matrix
+
+def upgma (distance_matrix, clusters):
+    """
+    Construct a phylogenetic tree using UPGMA.
+
+    Parameters
+    ----------
+    distance_matrix : dict
+        Initial pairwise distance matrix.
+
+    clusters : dict
+        Dictionary mapping sequence names to Node objects.
+
+    Returns
+    -------
+    Node
+        Root node of the UPGMA tree.
+    """
+    while len(clusters) > 1:
+
+        # Find the closest pair of clusters.
+        cluster_1, cluster_2 = find_closest_clusters(
+            distance_matrix,
+            clusters
+        )
+
+        distance = distance_matrix[cluster_1][cluster_2]
+
+        # Merge the closest clusters.
+        new_name, new_node = merge_clusters(
+            clusters,
+            cluster_1,
+            cluster_2,
+            distance
+        )
+
+
+        # Update the distance matrix.
+        distance_matrix = update_distance_matrix(
+            distance_matrix,
+            cluster_1,
+            cluster_2,
+            new_name
+        )
+
+        # Remove the old clusters.
+        del clusters[cluster_1]
+        del clusters[cluster_2]
+
+        # Add the new cluster.
+        clusters[new_name] = new_node
+
+    # The final remaining cluster is the root.
+    root = next(iter(clusters.values()))
+
+    return root
+
+
+
 
 
 
@@ -328,6 +458,20 @@ def merge_clusters(clusters, cluster_1, cluster_2):
 # Tree analysis
 # ============================================================
 
+def print_tree(node, level=0):
+    """
+    Print the tree structure for inspection.
+    """
+
+    print(
+        "  " * level,
+        node.name,
+        "height =", node.height,
+        "branch =", node.branch_length
+    )
+
+    for child in node.children:
+        print_tree(child, level + 1)
 
 # ============================================================
 # Robustness analysis
@@ -355,26 +499,15 @@ def main():
         p_distance
     )
 
-    clusters= {
+    clusters = {
         name: Node(name)
         for name in sequences
     }
 
-    pair = find_closest_clusters(matrix, clusters)
+    root = upgma(matrix, clusters)
 
-    print("Closest clusters:", pair)
-
-    new_name, new_node = merge_clusters(
-        clusters, 
-        pair[0],
-        pair[1]
-    )
-
-    print ("New Cluster:", new_name)
-    print("Children:")
-
-    for child in new_node.children:
-        print(child.name)
+    print("UPGMA tree:")
+    print_tree(root)
 
 
 
