@@ -104,6 +104,18 @@ def validate_alignment(sequences):
             "Sequences cannot be empty."
         )
 
+    valid_bases = set("ACGTN-")
+
+    for name, sequence in sequences.items():
+
+        invalid = set(sequence) - valid_bases
+
+        if invalid:
+            raise ValueError(
+                f"Invalid nucleotide(s) in {name}: "
+                f"{', '.join(sorted(invalid))}"
+            )
+
     return True
 def validate_target_group(sequences, target_group):
     """
@@ -1150,6 +1162,82 @@ def save_results_csv(pipeline_results, filename):
                 warnings
             ])
 
+def save_robustness_csv(robustness_result, target_group, filename):
+    """
+    Save the overall robustness summary to a CSV file.
+    """
+
+    with open(filename, "w", newline="") as file:
+
+        writer = csv.writer(file)
+
+        writer.writerow([
+            "target_group",
+            "pipelines_tested",
+            "supported",
+            "rejected",
+            "robustness",
+            "warning_pipelines"
+        ])
+
+        writer.writerow([
+            ";".join(sorted(target_group)),
+            robustness_result["total"],
+            robustness_result["supported"],
+            robustness_result["rejected"],
+            robustness_result["robustness"],
+            robustness_result["warning_pipelines"]
+        ])
+
+def save_run_summary(
+    fasta_path,
+    target_group,
+    robustness_result,
+    filename
+):
+    """
+    Save a human-readable summary of the PhyloRobust run.
+    """
+
+    with open(filename, "w") as file:
+
+        file.write("PhyloRobust V1\n")
+        file.write("=" * 30 + "\n\n")
+
+        file.write(f"Input FASTA:\n{fasta_path}\n\n")
+
+        file.write("Target group:\n")
+        for taxon in sorted(target_group):
+            file.write(f"- {taxon}\n")
+
+        file.write("\n")
+
+        file.write(
+            f"Pipelines tested: "
+            f"{robustness_result['total']}\n"
+        )
+
+        file.write(
+            f"Supported: "
+            f"{robustness_result['supported']}\n"
+        )
+
+        file.write(
+            f"Rejected: "
+            f"{robustness_result['rejected']}\n"
+        )
+
+        file.write(
+            f"Robustness: "
+            f"{robustness_result['robustness']:.2%}\n"
+        )
+
+        file.write(
+            f"Pipelines with warnings: "
+            f"{robustness_result['warning_pipelines']}\n"
+        )
+
+
 # ============================================================
 # Main program
 # ============================================================
@@ -1164,7 +1252,11 @@ def main():
     # 1. Read input sequences
     # --------------------------------------------------
 
-    sequences = read_fasta("Ver_01/test.fasta")
+    try:
+        sequences = read_fasta(args.fasta)
+    except FileNotFoundError:
+        print(f"Error: FASTA file not found: {args.fasta}")
+        return
 
     # --------------------------------------------------
     # 2. Validate the alignment
@@ -1272,6 +1364,41 @@ def main():
 
     robustness_result = calculate_robustness(
     pipeline_results)
+
+    robustness_csv_filepath = os.path.join(
+    "Ver_01",
+    "results",
+        "robustness_summary.csv"
+    )
+
+    save_robustness_csv(
+        robustness_result,
+        target_group,
+        robustness_csv_filepath
+    )
+
+    run_summary_filepath = os.path.join(
+    "Ver_01",
+    "results",
+    "run_summary.txt"
+)
+
+    save_run_summary(
+        fasta_path,
+        target_group,
+        robustness_result,
+        run_summary_filepath
+    )
+
+    print(
+        f"Saved run summary: "
+        f"{run_summary_filepath}"
+    )
+
+    print(
+        f"Saved robustness summary: "
+        f"{robustness_csv_filepath}"
+    )
 
 
     # --------------------------------------------------

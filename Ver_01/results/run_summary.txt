@@ -1,0 +1,15 @@
+PhyloRobust V1
+==============================
+
+Input FASTA:
+Ver_01/tests/test.fasta
+
+Target group:
+- Sequence_A
+- Sequence_B
+
+Pipelines tested: 4
+Supported: 4
+Rejected: 0
+Robustness: 100.00%
+Pipelines with warnings: 1

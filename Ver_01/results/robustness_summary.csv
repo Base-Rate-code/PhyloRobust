@@ -1,0 +1,2 @@
+target_group,pipelines_tested,supported,rejected,robustness,warning_pipelines
+Sequence_A;Sequence_B,4,4,0,1.0,1

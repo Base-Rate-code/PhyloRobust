@@ -129,6 +129,39 @@ class TestRobustness(unittest.TestCase):
         self.assertEqual(result["robustness"], 0.75)
         self.assertEqual(result["warning_pipelines"], 1)
 
+    def test_all_rejected(self):
+
+        results = [
+        {"target_supported": False, "warnings": []},
+        {"target_supported": False, "warnings": []},
+        {"target_supported": False, "warnings": []},
+        {"target_supported": False, "warnings": []}
+    ]
+
+        result = pr.calculate_robustness(results)
+
+        self.assertEqual(result["supported"], 0)
+        self.assertEqual(result["rejected"], 4)
+        self.assertEqual(result["total"], 4)
+        self.assertEqual(result["robustness"], 0.0)
+        self.assertEqual(result["warning_pipelines"], 0)
+
+    def test_half_supported(self):
+
+        results = [
+        {"target_supported": True, "warnings": []},
+        {"target_supported": True, "warnings": []},
+        {"target_supported": False, "warnings": []},
+        {"target_supported": False, "warnings": []}
+    ]
+
+        result = pr.calculate_robustness(results)
+
+        self.assertEqual(result["supported"], 2)
+        self.assertEqual(result["rejected"], 2)
+        self.assertEqual(result["total"], 4)
+        self.assertEqual(result["robustness"], 0.5)
+
 class TestPipelineAnalysis(unittest.TestCase):
 
     def setUp(self):
@@ -344,15 +377,7 @@ class TestEdgeCases(unittest.TestCase):
         with self.assertRaises(ValueError):
             pr.validate_alignment(sequences)   
 
-        def test_invalid_nucleotide(self):
-
-            sequences = {
-                "A": "AAAA",
-                "B": "AAAX"
-            }
-
-            with self.assertRaises(ValueError):
-                pr.validate_alignment(sequences)
+    
 
 if __name__ == "__main__":
     unittest.main()
