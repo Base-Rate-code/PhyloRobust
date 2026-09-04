@@ -13,6 +13,7 @@ Version: 1.0
 import math
 import os
 import csv
+import argparse
 
 # ============================================================
 # FASTA handling
@@ -104,9 +105,73 @@ def validate_alignment(sequences):
         )
 
     return True
+def validate_target_group(sequences, target_group):
+    """
+    Validate that all taxa in the target group are present
+    in the input alignment.
 
+    Parameters
+    ----------
+    sequences : dict
+        Input sequences.
 
+    target_group : set
+        Taxa defining the target clade.
 
+    Raises
+    ------
+    ValueError
+        If the target group is empty or contains taxa
+        not present in the alignment.
+    """
+
+    if not target_group:
+        raise ValueError(
+            "Target group cannot be empty."
+        )
+
+    if len(target_group) < 2:
+        raise ValueError(
+        "Target group must contain at least two taxa."
+        )
+
+    missing = target_group - set(sequences.keys())
+
+    if missing:
+        raise ValueError(
+            f"Target taxa not found in alignment: "
+            f"{', '.join(sorted(missing))}"
+        )
+
+def parse_arguments():
+    """
+    Parse command-line arguments for PhyloRobust.
+    """
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "PhyloRobust V1: assess the robustness of "
+            "a target phylogenetic clade across "
+            "multiple analytical pipelines."
+        )
+    )
+
+    parser.add_argument(
+        "fasta",
+        help="Path to the aligned nucleotide FASTA file."
+    )
+
+    parser.add_argument(
+        "--target",
+        nargs="+",
+        required=True,
+        help=(
+            "Taxa defining the target clade. "
+            "Provide two or more sequence names."
+        )
+    )
+
+    return parser.parse_args()
 # ============================================================
 # Distance calculations
 # ============================================================
@@ -1091,6 +1156,10 @@ def save_results_csv(pipeline_results, filename):
 
 def main():
 
+    args = parse_arguments()
+
+    fasta_path = args.fasta
+
     # --------------------------------------------------
     # 1. Read input sequences
     # --------------------------------------------------
@@ -1107,11 +1176,13 @@ def main():
     # --------------------------------------------------
     # 3. Define the biological claim being tested
     # --------------------------------------------------
+     
+    target_group = set(args.target)
 
-    target_group = {
-        "Sequence_A",
-        "Sequence_B"
-    }
+    validate_target_group(
+    sequences,
+    target_group
+)
 
     # --------------------------------------------------
     # 4. Run all four phylogenetic pipelines
@@ -1237,6 +1308,9 @@ def main():
     )
 
     print("-" * 70)
-    
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ValueError as error:
+        print(f"Error: {error}")
