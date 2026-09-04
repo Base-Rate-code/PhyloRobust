@@ -11,6 +11,8 @@ Version: 1.0
 # ============================================================
 
 import math
+import os
+import csv
 
 # ============================================================
 # FASTA handling
@@ -49,7 +51,7 @@ def read_fasta(filename):
                         "FASTA header cannot be empty."
                         )
 
-                if not current_name:
+                if current_name in sequences:
                     raise ValueError(
                         f"Duplicate sequence name found: {current_name}"
                     )
@@ -805,29 +807,6 @@ def clade_supported(tree, target_group):
 
     return False
 
-def calculate_support(tree_results, target_group):
-    """
-    Calculate how many phylogenetic trees support
-    a target biological grouping.
-    """
-
-    supported = 0
-    total = len(tree_results)
-
-    for tree in tree_results:
-        if clade_supported(tree, target_group):
-            supported += 1
-
-    support_fraction = supported / total
-
-    return supported, total, support_fraction
-
-
-
-
-
-
-
 # ============================================================
 # Tree analysis
 # ============================================================
@@ -847,15 +826,264 @@ def print_tree(node, level=0):
     for child in node.children:
         print_tree(child, level + 1)
 
+def tree_to_newick(node):
+    """
+    Convert a phylogenetic tree into Newick format.
+
+    Parameters
+    ----------
+    node : Node
+        Root node of the tree.
+
+    Returns
+    -------
+    str
+        Tree represented in Newick format.
+    """
+
+    if not node.children:
+        return f"{node.name}:{node.branch_length}"
+
+    children = [
+        tree_to_newick(child)
+        for child in node.children
+    ]
+
+    return f"({','.join(children)}):{node.branch_length}"
+
+def export_newick(tree):
+    """
+    Convert a tree into a complete Newick string.
+    """
+
+    newick = tree_to_newick(tree)
+
+    # The root branch length is normally zero
+    # and is not required in the final Newick representation.
+    if newick.endswith(":0.0"):
+        newick = newick[:-4]
+
+    return newick + ";"
+
+def save_newick(tree, filename):
+    """
+    Save a phylogenetic tree in Newick format.
+
+    Parameters
+    ----------
+    tree : Node
+        Root node of the phylogenetic tree.
+
+    filename : str
+        Output filename.
+    """
+
+    newick = export_newick(tree)
+
+    with open(filename, "w") as file:
+        file.write(newick + "\n")
+
+def find_negative_branches(node, warnings=None):
+    """
+    Find negative branch lengths in a phylogenetic tree.
+
+    Parameters
+    ----------
+    node : Node
+        Root node of the tree.
+
+    warnings : list, optional
+        List used to store warning messages.
+
+    Returns
+    -------
+    list
+        List of warning messages for negative branch lengths.
+    """
+
+    if warnings is None:
+        warnings = []
+
+    if node.branch_length < 0:
+        warnings.append(
+            f"Negative branch length detected for "
+            f"{node.name}: {node.branch_length}"
+        )
+
+    for child in node.children:
+        find_negative_branches(child, warnings)
+
+    return warnings
+
 # ============================================================
 # Robustness analysis
 # ============================================================
 
+PIPELINES = [
+    {
+        "name": "p-distance + UPGMA",
+        "filename": "p_distance_UPGMA",
+        "distance_model": "p-distance",
+        "distance_function": p_distance,
+        "tree_method": "UPGMA",
+        "tree_function": upgma
+    },
+    {
+        "name": "p-distance + NJ",
+        "filename": "p_distance_NJ",
+        "distance_model": "p-distance",
+        "distance_function": p_distance,
+        "tree_method": "NJ",
+        "tree_function": nj
+    },
+    {
+        "name": "Jukes-Cantor + UPGMA",
+        "filename": "jukes_cantor_UPGMA",
+        "distance_model": "Jukes-Cantor",
+        "distance_function": jukes_cantor_distance,
+        "tree_method": "UPGMA",
+        "tree_function": upgma
+    },
+    {
+        "name": "Jukes-Cantor + NJ",
+        "filename": "jukes_cantor_NJ",
+        "distance_model": "Jukes-Cantor",
+        "distance_function": jukes_cantor_distance,
+        "tree_method": "NJ",
+        "tree_function": nj
+    }
+]
 
+def analyse_pipeline(sequences, pipeline, target_group):
+
+    tree = run_pipeline(
+        sequences,
+        pipeline["distance_function"],
+        pipeline["tree_function"]
+    )
+
+    supported = clade_supported(
+        tree,
+        target_group
+    )
+
+    warnings = find_negative_branches(tree)
+
+    if supported:
+        conclusion = "SUPPORTED"
+    else:
+        conclusion = "REJECTED"
+
+    result = {
+        "pipeline": pipeline["name"],
+        "filename": pipeline["filename"],
+        "distance_model": pipeline["distance_model"],
+        "tree_method": pipeline["tree_method"],
+        "target_group": target_group,
+        "target_supported": supported,
+        "conclusion": conclusion,
+        "warnings": warnings,
+        "tree": tree
+    }
+    return result
+
+def calculate_robustness(pipeline_results):
+    """
+    Calculate overall robustness across all tested pipelines.
+
+    Parameters
+    ----------
+    pipeline_results : list
+        Results generated by analyse_pipeline().
+
+    Returns
+    -------
+    dict
+        Summary of supported, rejected, total pipelines,
+        robustness, and warnings.
+    """
+
+    total = len(pipeline_results)
+
+    if total == 0:
+        return {
+            "supported": 0,
+            "rejected": 0,
+            "total": 0,
+            "robustness": 0.0,
+            "warning_pipelines": 0
+        }
+
+    supported = sum(
+        result["target_supported"]
+        for result in pipeline_results
+    )
+
+    rejected = total - supported
+
+    warning_pipelines = sum(
+        bool(result["warnings"])
+        for result in pipeline_results
+    )
+
+    robustness = supported / total
+
+    return {
+        "supported": supported,
+        "rejected": rejected,
+        "total": total,
+        "robustness": robustness,
+        "warning_pipelines": warning_pipelines
+    }
 # ============================================================
 # Output
 # ============================================================
+def save_results_csv(pipeline_results, filename):
+    """
+    Save pipeline-level results to a CSV file.
 
+    Parameters
+    ----------
+    pipeline_results : list
+        Results from all phylogenetic pipelines.
+
+    filename : str
+        Output CSV filename.
+    """
+
+    with open(filename, "w", newline="") as file:
+
+        writer = csv.writer(file)
+
+        # Header
+        writer.writerow([
+            "pipeline",
+            "distance_model",
+            "tree_method",
+            "target_group",
+            "conclusion",
+            "warnings"
+        ])
+
+        # One row per pipeline
+        for result in pipeline_results:
+
+            target_group = ";".join(
+                sorted(result["target_group"])
+            )
+
+            warnings = " | ".join(
+                result["warnings"]
+            )
+
+            writer.writerow([
+                result["pipeline"],
+                result["distance_model"],
+                result["tree_method"],
+                target_group,
+                result["conclusion"],
+                warnings
+            ])
 
 # ============================================================
 # Main program
@@ -874,51 +1102,10 @@ def main():
     # --------------------------------------------------
 
     validate_alignment(sequences)
+    os.makedirs("Ver_01/results", exist_ok=True)
 
     # --------------------------------------------------
-    # 3. Display the p-distance matrix
-    # --------------------------------------------------
-
-    matrix = calculate_distance_matrix(
-        sequences,
-        p_distance
-    )
-
-    print("Distance matrix:")
-
-    for name, distances in matrix.items():
-        print(name, distances)
-
-    # --------------------------------------------------
-    # 4. Run all four phylogenetic pipelines
-    # --------------------------------------------------
-
-    p_distance_upgma = run_pipeline(
-        sequences,
-        p_distance,
-        upgma
-    )
-
-    p_distance_nj = run_pipeline(
-        sequences,
-        p_distance,
-        nj
-    )
-
-    jc_upgma = run_pipeline(
-        sequences,
-        jukes_cantor_distance,
-        upgma
-    )
-
-    jc_nj = run_pipeline(
-        sequences,
-        jukes_cantor_distance,
-        nj
-    )
-
-        # --------------------------------------------------
-    # 5. Define the biological claim being tested
+    # 3. Define the biological claim being tested
     # --------------------------------------------------
 
     target_group = {
@@ -927,29 +1114,129 @@ def main():
     }
 
     # --------------------------------------------------
-    # 6. Collect all pipeline results
+    # 4. Run all four phylogenetic pipelines
     # --------------------------------------------------
 
-    tree_results = [
-        p_distance_upgma,
-        p_distance_nj,
-        jc_upgma,
-        jc_nj
-    ]
+    pipeline_results = []
 
-    # --------------------------------------------------
-    # 7. Calculate robustness
-    # --------------------------------------------------
+    for pipeline in PIPELINES:
 
-    supported, total, fraction = calculate_support(
-        tree_results,
-        target_group
+        result = analyse_pipeline(
+            sequences,
+            pipeline,
+            target_group
+        )
+
+        pipeline_results.append(result)
+
+
+# --------------------------------------------------
+# Save Newick trees
+# --------------------------------------------------
+
+
+    for result in pipeline_results:
+
+        filename = result["filename"] + ".nwk"
+
+        filepath = os.path.join(
+            "Ver_01",
+            "results",
+            filename
+        )
+
+        save_newick(
+            result["tree"],
+            filepath
+    )
+        print(f"Saved Newick tree: {filepath}")
+
+# --------------------------------------------------
+# Save pipeline results to CSV
+# --------------------------------------------------
+
+    csv_filepath = os.path.join(
+        "Ver_01",
+        "results",
+        "pipeline_results.csv"
     )
 
-    print("\nRobustness:")
-    print(f"Target group: {target_group}")
-    print(f"Supported: {supported}/{total}")
-    print(f"Robustness: {fraction:.2%}")
+    save_results_csv(
+        pipeline_results,
+        csv_filepath
+    )
 
+    print(f"Saved pipeline results: {csv_filepath}")
+            
+
+    
+
+    # --------------------------------------------------
+    # 5. Display individual pipeline results
+    # --------------------------------------------------
+
+    print("\nPipeline Results:")
+    print("-" * 70)
+
+    for result in pipeline_results:
+
+        print(f"Pipeline: {result['pipeline']}")
+        print(f"Distance model: {result['distance_model']}")
+        print(f"Tree method: {result['tree_method']}")
+        print(f"Target group: {result['target_group']}")
+        print(f"Conclusion: {result['conclusion']}")
+
+        if result["warnings"]:
+            print("Warnings:")
+            for warning in result["warnings"]:
+                print(f"  - {warning}")
+        else:
+            print("Warnings: None")
+
+        print("-" * 70)
+
+    # --------------------------------------------------
+    # 6. Calculate overall robustness
+    # --------------------------------------------------
+
+    robustness_result = calculate_robustness(
+    pipeline_results)
+
+
+    # --------------------------------------------------
+    # 7. Display robustness
+    # --------------------------------------------------
+
+    print("\nRobustness Summary:")
+    print("-" * 70)
+
+    print(f"Target group: {target_group}")
+    print(
+        f"Pipelines tested: "
+        f"{robustness_result['total']}"
+    )
+
+    print(
+        f"Supported: "
+        f"{robustness_result['supported']}"
+    )
+
+    print(
+        f"Rejected: "
+        f"{robustness_result['rejected']}"
+    )
+
+    print(
+        f"Robustness: "
+        f"{robustness_result['robustness']:.2%}"
+    )
+
+    print(
+        f"Pipelines with warnings: "
+        f"{robustness_result['warning_pipelines']}"
+    )
+
+    print("-" * 70)
+    
 if __name__ == "__main__":
     main()

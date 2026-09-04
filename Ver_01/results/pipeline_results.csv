@@ -1,0 +1,5 @@
+pipeline,distance_model,tree_method,target_group,conclusion,warnings
+p-distance + UPGMA,p-distance,UPGMA,Sequence_A;Sequence_B,SUPPORTED,
+p-distance + NJ,p-distance,NJ,Sequence_A;Sequence_B,SUPPORTED,
+Jukes-Cantor + UPGMA,Jukes-Cantor,UPGMA,Sequence_A;Sequence_B,SUPPORTED,
+Jukes-Cantor + NJ,Jukes-Cantor,NJ,Sequence_A;Sequence_B,SUPPORTED,Negative branch length detected for Sequence_A: -0.015308247945095665
